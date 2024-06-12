@@ -18,7 +18,7 @@ cfg = get_parser()
 
 import tempfile
 from subprocess import call
-os.environ['PYOPENGL_PLATFORM'] = 'osmesa' #egl
+os.environ['PYOPENGL_PLATFORM'] = 'egl' #egl
 import pyrender
 import trimesh
 from psbody.mesh import Mesh
@@ -161,10 +161,30 @@ def test(model, wav_file, save_folder, condition, subject):
     audio_feature = np.reshape(audio_feature,(-1,audio_feature.shape[0]))
     audio_feature = torch.FloatTensor(audio_feature).to(device='cuda')
 
+    from vertices2flame import FlameInverter
+    inverter = FlameInverter(from_pretrained=True)
+    inverter = inverter.cuda()
 
+    from FLAME_PyTorch.FLAME import FLAME
+    from FLAME_PyTorch.config import get_config
+    config = get_config()
+
+    vertex_decoder = FLAME(config)
+    for param in vertex_decoder.parameters():
+            param.requires_grad = False
+
+    def convert_to_vertices(exp, pose):
+            shape_params = torch.zeros(exp.shape[0], exp.shape[1], 100)
+            pose[:, : , :3] = 0
+            vertex_out, _ = vertex_decoder(shape_params[:exp.shape[0]], exp.cpu(), pose.cpu())
+            # vertexes get returned in shape (batch_size*seq_len, 5023, 3), where each entry in a batch has been concatenated in dim 0,  we need to reshape them to (batch_size, seq_len, 5023*3)
+            vertex_out = vertex_out.reshape(exp.shape[0], -1, vertex_out.shape[1] * vertex_out.shape[2])
+            return vertex_out
 
     with torch.no_grad():
         prediction = model.predict(audio_feature, template, one_hot)
+        pose, exp = inverter(prediction)
+        prediction = convert_to_vertices(exp, pose)
         prediction = prediction.squeeze() # (seq_len, V*3)
         np.save(predicted_vertices_path, prediction.detach().cpu().numpy())
         print(f'Save facial animation in {predicted_vertices_path}')
@@ -209,7 +229,7 @@ def test(model, wav_file, save_folder, condition, subject):
     call(cmd)
 
     cmd = ('ffmpeg' + ' -i {0} -i {1} -vcodec h264 -ac 2 -channel_layout stereo -qscale 0 {2}'.format(
-       wav_file, video_fname, video_fname.replace('.mp4', '_audio.mp4'))).split()
+       wav_file, video_fname, video_fname.replace('.mp4', '_audio_generated.mp4'))).split()
     call(cmd)
 
     if os.path.exists(video_fname):

@@ -155,3 +155,81 @@ class CodeTalker(BaseModel):
 
         vertice_out = vertice_out + template
         return vertice_out
+
+    def generate(self, audio, template, length, one_hot, one_hot2=None, weight_of_one_hot=None):
+        template = template.unsqueeze(1) # (1,1, V*3)
+
+        # style embedding
+        obj_embedding = self.learnable_style_emb(torch.argmax(one_hot, dim=1))
+
+        # style interpolation (optional)
+        if one_hot2 is not None and weight_of_one_hot is not None:
+            obj_embedding2 = self.learnable_style_emb(torch.argmax(one_hot2, dim=1))
+            obj_embedding = obj_embedding * weight_of_one_hot + obj_embedding2 * (1-weight_of_one_hot)
+        obj_embedding = obj_embedding.unsqueeze(1)
+
+        frameSkip = 2
+        # audio feature extraction
+        hidden_states = self.audio_encoder(audio, self.dataset).last_hidden_state
+        if self.dataset == "BIWI":
+            frame_num = int(np.round(hidden_states.shape[1]/frameSkip))
+        else:
+            frame_num = int(np.round(hidden_states.shape[1]/frameSkip))
+        hidden_states = self.audio_feature_map(hidden_states)
+
+        change_list = []
+        # autoregressive facial motion prediction
+        yieldIndex = 0
+        print(frame_num)
+        for i in range(frame_num):
+            if i==0:
+                vertice_emb = obj_embedding # (1,1,feature_dim)
+                style_emb = vertice_emb
+                vertice_input = self.PPE(style_emb)
+            else:
+                vertice_input = self.PPE(vertice_emb)
+
+            tgt_mask = self.biased_mask[:, :vertice_input.shape[1], :vertice_input.shape[1]].clone().detach().to(device=self.device)
+            memory_mask = enc_dec_mask(self.device, self.dataset, vertice_input.shape[1], hidden_states.shape[1])
+            feat_out = self.transformer_decoder(vertice_input, hidden_states, tgt_mask=tgt_mask, memory_mask=memory_mask)
+            feat_out = self.feat_map(feat_out)
+
+            feat_out = feat_out.reshape(feat_out.shape[0], feat_out.shape[1]*self.args.face_quan_num, -1)
+            # predicted feature to quantized one
+            feat_out_q, _, _ = self.autoencoder.quantize(feat_out)
+            # quantized feature to vertice
+            if i == 0:
+                vertice_out_q = self.autoencoder.decode(torch.cat([feat_out_q, feat_out_q], dim=-1))
+                vertice_out_q = vertice_out_q[:,0].unsqueeze(1)
+            else:
+                vertice_out_q = self.autoencoder.decode(feat_out_q)
+            
+
+            new_frame = vertice_out_q[:,-1,:]
+
+            # if i == 0:
+            #     # yield template
+            #     yield vertice_out_q[:, :1, :]
+            # else:
+            if (i!=0 and i % length == 0):
+                # print(i,vertice_out_q.shape)
+                yield vertice_out_q[:, yieldIndex:yieldIndex+length*frameSkip:, :]
+                yieldIndex += length * frameSkip
+            
+            
+            if i != frame_num - 1:
+                new_output = self.vertice_map(new_frame).unsqueeze(1)
+                new_output = new_output + style_emb
+                vertice_emb = torch.cat((vertice_emb, *([new_output]*frameSkip)), 1)
+
+        if yieldIndex < vertice_out_q.shape[1]:
+            out = vertice_out_q[:, yieldIndex:, :]
+            if out.shape[1] == 1:
+                out = torch.cat((out, out), 1)
+            yield out
+        # quantization and decoding
+        feat_out_q, _, _ = self.autoencoder.quantize(feat_out)
+        vertice_out = self.autoencoder.decode(feat_out_q)
+
+        # vertice_out = vertice_out + template
+        return vertice_out
