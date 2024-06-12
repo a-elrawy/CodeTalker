@@ -7,6 +7,7 @@ from transformers import Wav2Vec2Processor
 import librosa
 from collections import defaultdict
 from torch.utils import data 
+from .dataset import get_dataloader_vox
 
 class Dataset(data.Dataset):
     """Custom data.Dataset compatible with data.DataLoader."""
@@ -101,6 +102,9 @@ def read_data(args):
     return train_data, valid_data, test_data, subjects_dict
 
 def get_dataloaders(args):
+    if args.dataset == "vox":
+        return get_dataloader_vox(args)
+        
     dataset = {}
     train_data, valid_data, test_data, subjects_dict = read_data(args)
     train_data = Dataset(train_data,subjects_dict,"train",args.read_audio)
