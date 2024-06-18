@@ -1,2 +1,7 @@
 *.pth.tar
 __pycache__/
+VoxSubject*
+RUN
+FLAME_PyTorch/
+demo
+vocaset

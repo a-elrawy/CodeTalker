@@ -41,7 +41,7 @@ DEMO:
   model_path: BIWI/biwi_stage2.pth.tar
   condition: F2  # should be within train_subjects: F2 F3 F4 M3 M4 M5
   subject: M1
-  demo_wav_path: demo/wav/man.wav
+  demo_wav_path: demo/wav/Grace.wav
   demo_output_path: demo/output/
   demo_npy_save_folder: demo/npy/
   fps: 25

@@ -13,7 +13,7 @@ import torch.distributed as dist
 from tensorboardX import SummaryWriter
 import cv2
 
-from base.baseTrainer import poly_learning_rate, reduce_tensor, save_checkpoint
+from base.baseTrainer import poly_learning_rate, reduce_tensor, save_checkpoint, load_state_dict
 from base.utilities import get_parser, get_logger, main_process, AverageMeter
 from models import get_model
 from torch.optim.lr_scheduler import StepLR
@@ -79,6 +79,16 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         torch.cuda.set_device(gpu)
         model = model.cuda()
+
+    # ###################### Load pretrained ################### #
+    vocaset_trained_checkpoint = './vocaset/vocaset_stage2.pth.tar'
+    if os.path.isfile(vocaset_trained_checkpoint):
+        print("=> loading checkpoint '{}'".format(vocaset_trained_checkpoint))
+        checkpoint = torch.load(vocaset_trained_checkpoint, map_location=lambda storage, loc: storage.cpu())
+        load_state_dict(model, checkpoint['state_dict'], strict=False)
+        print("=> loaded checkpoint '{}'".format(vocaset_trained_checkpoint))
+    else:
+        raise RuntimeError("=> no checkpoint flound at '{}'".format(vocaset_trained_checkpoint))
 
     # ####################### Loss ############################# #
     loss_fn = nn.MSELoss()
@@ -157,6 +167,9 @@ def train(train_loader, model, loss_fn, optimizer, epoch, cfg):
         current_iter = epoch * len(train_loader) + i + 1
         data_time.update(time.time() - end)
 
+        if data.shape[1] > 600:
+            continue
+
         #################### cpu to gpu
         audio = audio.cuda(cfg.gpu, non_blocking=True)
         data = data.cuda(cfg.gpu, non_blocking=True) 
@@ -217,24 +230,30 @@ def validate(val_loader, model, loss_fn, cfg):
     train_subjects_list = [i for i in cfg.train_subjects.split(" ")]
     with torch.no_grad():
         for i, (audio, vertice, template, one_hot_all, file_name) in enumerate(val_loader):
+            
+            if vertice.shape[1] > 600:
+                continue
+
             audio = audio.cuda(cfg.gpu, non_blocking=True)
             one_hot_all = one_hot_all.cuda(cfg.gpu, non_blocking=True)
             vertice = vertice.cuda(cfg.gpu, non_blocking=True)
             template = template.cuda(cfg.gpu, non_blocking=True)
 
-            train_subject = "_".join(file_name[0].split("_")[:-1])
-            if train_subject in train_subjects_list:
-                condition_subject = train_subject
-                iter = train_subjects_list.index(condition_subject)
-                one_hot = one_hot_all[:,iter,:]
-                loss, _ = model(audio, template, vertice, one_hot, criterion=loss_fn)
-                loss_meter.update(loss.item(), 1)
-            else:
-                for iter in range(one_hot_all.shape[-1]):
-                    condition_subject = train_subjects_list[iter]
-                    one_hot = one_hot_all[:,iter,:]
-                    loss, _ = model(audio, template, vertice, one_hot, criterion=loss_fn)
-                    loss_meter.update(loss.item(), 1)
+            loss, _ = model(audio, template, vertice, one_hot_all, criterion=loss_fn)
+            loss_meter.update(loss.item(), 1)
+            # train_subject = "_".join(file_name[0].split("_")[:-1])
+            # if train_subject in train_subjects_list:
+            #     condition_subject = train_subject
+            #     iter = train_subjects_list.index(condition_subject)
+            #     one_hot = one_hot_all[:,iter,:]
+            #     loss, _ = model(audio, template, vertice, one_hot, criterion=loss_fn)
+            #     loss_meter.update(loss.item(), 1)
+            # else:
+            #     for iter in range(one_hot_all.shape[-1]):
+            #         condition_subject = train_subjects_list[iter]
+            #         one_hot = one_hot_all[:,iter,:]
+            #         loss, _ = model(audio, template, vertice, one_hot, criterion=loss_fn)
+            #         loss_meter.update(loss.item(), 1)
 
             # if cfg.distributed:
             #     loss = reduce_tensor(loss, cfg)

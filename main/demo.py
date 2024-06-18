@@ -30,7 +30,7 @@ def render_mesh_helper(args,mesh, t_center, rot=np.zeros(3), tex_img=None, z_off
         camera_params = {'c': np.array([400, 400]),
                          'k': np.array([-0.19816071, 0.92822711, 0, 0, 0]),
                          'f': np.array([4754.97941935 / 8, 4754.97941935 / 8])}
-    elif args.dataset == "vocaset":
+    else:
         camera_params = {'c': np.array([400, 400]),
                          'k': np.array([-0.19816071, 0.92822711, 0, 0, 0]),
                          'f': np.array([4754.97941935 / 2, 4754.97941935 / 2])}
@@ -195,7 +195,7 @@ def test(model, wav_file, save_folder, condition, subject):
 
     if cfg.dataset == "BIWI":
         template_file = os.path.join(cfg.data_root, "BIWI.ply")
-    elif cfg.dataset == "vocaset":
+    else:
         template_file = os.path.join(cfg.data_root, "FLAME_sample.ply")
          
     print("rendering: ", test_name)
@@ -229,7 +229,7 @@ def test(model, wav_file, save_folder, condition, subject):
     call(cmd)
 
     cmd = ('ffmpeg' + ' -i {0} -i {1} -vcodec h264 -ac 2 -channel_layout stereo -qscale 0 {2}'.format(
-       wav_file, video_fname, video_fname.replace('.mp4', '_audio_generated.mp4'))).split()
+       wav_file, video_fname, video_fname.replace('.mp4', '_audio_generated_finetune.mp4'))).split()
     call(cmd)
 
     if os.path.exists(video_fname):

@@ -32,10 +32,10 @@ def save_checkpoint(model, other_state={}, sav_path='', filename='model.pth.tar'
         raise ValueError('model must be nn.Module or nn.DataParallel!')
     check_makedirs(sav_path)
 
-    if stage == 2: # remove vqvae part
-        for k in list(weight.keys()):
-            if 'autoencoder' in k:
-                weight.pop(k)
+    # if stage == 2: # remove vqvae part
+    #     for k in list(weight.keys()):
+    #         if 'autoencoder' in k:
+    #             weight.pop(k)
 
     other_state['state_dict'] = weight
     filename = join(sav_path, filename)

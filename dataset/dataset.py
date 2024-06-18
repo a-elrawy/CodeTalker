@@ -100,10 +100,10 @@ class MooflDataset(Dataset):
 
 
         # load the template
-        pcd = o3d.io.read_point_cloud("./dataset/model/FLAME_sample.ply")
+        pcd = o3d.io.read_point_cloud("./vocaset/FLAME_sample.ply")
         template = np.asarray(pcd.points).reshape((-1))
         self.template = torch.from_numpy(template).float()
-        subjects = [os.path.basename(f).split("_")[0] for f in self.audio_files]
+        # subjects = [os.path.basename(f).split("#")[0] for f in self.files]
         self.one_hot_labels = np.eye(8)
 
     def __len__(self):
@@ -153,8 +153,8 @@ class MooflDataset(Dataset):
 
 
 def get_dataloader_vox(config):
-    dataset = MooflDataset("./VoxSubject1",
-                            mode="train", read_audio=config.read_audio, file_name=config.visualize, in_memory=True)
+    dataset = MooflDataset(config.data_root,
+                            mode="train", read_audio=config.read_audio, in_memory=True)
 
 
     dataloaders = create_dataloaders(dataset, config.batch_size, num_workers=10, shuffle=True)

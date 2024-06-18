@@ -49,6 +49,10 @@ def test(model, test_loader):
 
     with torch.no_grad():
         for i, (audio, vertice, template, one_hot_all, file_name) in enumerate(test_loader):
+
+            if vertice.shape[1] > 600:
+                continue
+            
             audio = audio.cuda(non_blocking=True)
             one_hot_all = one_hot_all.cuda(non_blocking=True)
             vertice = vertice.cuda(non_blocking=True)
